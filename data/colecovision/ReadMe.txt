@@ -1,0 +1,1 @@
+Make sure the Coleco bios file is in this directory with the name: 'coleco.rom'
