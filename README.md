@@ -11,6 +11,7 @@ Based on [smsplus](https://www.bannister.org/software/sms.htm) and [DarcNES](htt
 
 | WiiMote (sideways) | COLECOVISION |
 | ---------- | ----------- |
+| arrow keys | joystick 1 |
 | A,1 | Keypad 1 |
 | B,2 | Fire |
 | Home | GUI |
