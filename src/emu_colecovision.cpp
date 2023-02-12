@@ -15,7 +15,7 @@
 ** SOFTWARE.
 **
 **
-** Additional code Copyright (c) 2021, EMWiRES Allard van der Bas.
+** Additional code Copyright (c) 2021,2022,2023 EMWiRES Allard van der Bas.
 **
 */
 
@@ -341,21 +341,27 @@ const char* _colecovision_ext[] = {
 };
 
 const char* _colecovision_help[] = {
-    "Keyboard:",
-    "  Arrow Keys - D-Pad",
-    "  Left Shift - Button 1",
-    "  Option     - Button 2",
-    "  Return     - Start",
-    "  Tab        - Select",
+    "8BitDo Zero2 / FC30:",
+    "  A          - Button 1",
+    "  B          - Button 2",
+    "  R-Button   - keypad #",
+    "  L-Button   - keypad *",
+    "  X          - keypad 1",
+    "  Y          - keypad 2",
+    "  select     - game select",
     "",
-    "Wiimote (held sideways):",
+	"Wiimote (held sideways):",
     "  +          - Start",
     "  -          - Pause",
     "  + & -      - Reset",
     "  A,1        - Button 1",
     "  B,2        - Button 2",
+    "  HOME       - game select",
     0
 };
+
+// extern int bankMask;
+// extern int doBanking;
 
 // https://www.smspower.org/Homebrew/Index
 std::string to_string(int i);
@@ -449,11 +455,23 @@ public:
 		}
        
 /* Don't need CrapFS for small roms */
+/* With bigger banked roms this is needed again */
 /*		uint8_t buf[16];
         int len = head(path,buf,sizeof(buf));
         
+        printf("Rom length: %d\n",len);
+        
 		if (len <= 0)
             return -1;
+            
+        if (len > 32768) {
+        	doBanking = 1;
+        	
+        	if      (len == (64  * 1024)) bankMask = 0x03;
+            else if (len == (128 * 1024)) bankMask = 0x07;
+            else if (len == (256 * 1024)) bankMask = 0x0F;
+            else if (len == (512 * 1024)) bankMask = 0x1F;
+		}
             
         unmap_file(_colecovision_rom);
         
@@ -541,11 +559,158 @@ public:
         0,                  //GENERIC_MENU    0x0001
     };
 
+
+    // Data is coming in here.
+    //
+    // FC30 has length 10 and first byte 0x03.
+    // Zero 2 has length 12 and first byte 0x3F.
     // raw HID data. handle WII/IR mappings
+    //
+    // FC30:
+    //
+    // No press: 0x03 0x0F 0x7F 0x7F 0x7F 0x7F 0x00 0x00 0x00 0x00
+    // L-Button: 0x03 0x0F 0x7F 0x7F 0x7F 0x7F 0x00 0x00 0x40 0x00 
+    // R-Button: 0x03 0x0F 0x7F 0x7F 0x7F 0x7F 0x00 0x00 0x80 0x00 
+    // Up      : 0x03 0x0F 0x7F 0x00 0x7F 0x7F 0x00 0x00 0x00 0x00
+    // Down    : 0x03 0x0F 0x7F 0xFF 0x7F 0x7F 0x00 0x00 0x00 0x00
+    // Left    : 0x03 0x0F 0x00 0x7F 0x7F 0x7F 0x00 0x00 0x00 0x00
+    // Right   : 0x03 0x0F 0xFF 0x7F 0x7F 0x7F 0x00 0x00 0x00 0x00 
+    // A       : 0x03 0x0F 0x7F 0x7F 0x7F 0x7F 0x00 0x00 0x01 0x00
+    // B       : 0x03 0x0F 0x7F 0x7F 0x7F 0x7F 0x00 0x00 0x02 0x00
+    // X       : 0x03 0x0F 0x7F 0x7F 0x7F 0x7F 0x00 0x00 0x08 0x00 
+    // Y       : 0x03 0x0F 0x7F 0x7F 0x7F 0x7F 0x00 0x00 0x10 0x00 
+    // SELECT  : 0x03 0x0F 0x7F 0x7F 0x7F 0x7F 0x00 0x00 0x00 0x04
+    // START   : 0x03 0x0F 0x7F 0x7F 0x7F 0x7F 0x00 0x00 0x00 0x08 
+
+	// Zero 2:
+	// No press: 0x3F 0x00 0x00 0x08 0x00 0x7F 0x00 0x7F 0x00 0x7F 0x00 0x7F 
+	// L-Button: 0x3F 0x10 0x00 0x08 0x00 0x7F 0x00 0x7F 0x00 0x7F 0x00 0x7F
+	// R-Button: 0x3F 0x20 0x00 0x08 0x00 0x7F 0x00 0x7F 0x00 0x7F 0x00 0x7F
+	// Up      : 0x3F 0x00 0x00 0x08 0x00 0x7F 0x00 0x00 0x00 0x7F 0x00 0x7F
+	// Down    : 0x3F 0x00 0x00 0x08 0x00 0x7F 0xFF 0xFF 0x00 0x7F 0x00 0x7F
+	// Left    : 0x3F 0x00 0x00 0x08 0x00 0x00 0x00 0x7F 0x00 0x7F 0x00 0x7F
+	// Right   : 0x3F 0x00 0x00 0x08 0xFF 0xFF 0x00 0x7F 0x00 0x7F 0x00 0x7F
+	// A       : 0x3F 0x02 0x00 0x08 0x00 0x7F 0x00 0x7F 0x00 0x7F 0x00 0x7F 
+	// B       : 0x3F 0x01 0x00 0x08 0x00 0x7F 0x00 0x7F 0x00 0x7F 0x00 0x7F
+	// X       : 0x3F 0x08 0x00 0x08 0x00 0x7F 0x00 0x7F 0x00 0x7F 0x00 0x7F
+	// Y       : 0x3F 0x04 0x00 0x08 0x00 0x7F 0x00 0x7F 0x00 0x7F 0x00 0x7F
+	// SELECT  : 0x3F 0x00 0x01 0x08 0x00 0x7F 0x00 0x7F 0x00 0x7F 0x00 0x7F
+	// START   : 0x3F 0x00 0x02 0x08 0x00 0x7F 0x00 0x7F 0x00 0x7F 0x00 0x7F
     virtual void hid(const uint8_t* d, int len)
     {
-        if (d[0] != 0x32 && d[0] != 0x42)
+    	
+    	// Test.
+    	// printf("hid called with data len %d\n",len);
+    	
+    	// if (len > 0) {
+    	//	for(int cnt=0;cnt<len;cnt++) {
+    	//		printf("0x%02X ",d[cnt]);
+		//	}
+		//	printf("\n");
+		// }
+		
+		// FC30
+		if ((len == 10) && (d[0] == 0x03)) {
+			uint32_t p;
+			
+			p = 0;
+			
+			if (d[3] == 0x00) {
+				p |= INPUT_UP;
+			}
+			
+			if (d[3] == 0xFF) {
+				p |= INPUT_DOWN;
+			}
+			
+			if (d[2] == 0x00) {
+				p |= INPUT_LEFT;
+			}
+			
+			if (d[2] == 0xFF) {
+				p |= INPUT_RIGHT;
+			}
+			
+			if (d[8] & 0x01) {
+				p |= INPUT_BUTTON2;
+			}
+			
+			if (d[8] & 0x02) {
+				p |= INPUT_BUTTON1;
+			}
+			
+			if (d[8] & 0x08) {
+				p |= INPUT_KEY1;
+			}
+			
+			if (d[8] & 0x10) {
+				p |= INPUT_KEY2;
+			}
+			
+			if (d[8] & 0x40) {
+				p |= INPUT_KEY_HASH;
+			}
+			
+			if (d[8] & 0x80) {
+				p |= INPUT_KEY_STAR;
+			}
+			
+			input.pad[0] = p;
+			return;
+			
+		// Zero 2
+		} else if ((len == 12) && (d[0] == 0x3F)) {
+			
+			uint32_t p;
+			
+			p = 0;
+			
+			if (d[7] == 0x00) {
+				p |= INPUT_UP;
+			}
+			
+			if (d[7] == 0xFF) {
+				p |= INPUT_DOWN;
+			}
+			
+			if (d[5] == 0x00) {
+				p |= INPUT_LEFT;
+			}
+			
+			if (d[5] == 0xFF) {
+				p |= INPUT_RIGHT;
+			}
+			
+			if (d[1] & 0x01) {
+				p |= INPUT_BUTTON2;
+			}
+			
+			if (d[1] & 0x02) {
+				p |= INPUT_BUTTON1;
+			}
+			
+			if (d[1] & 0x08) {
+				p |= INPUT_KEY1;
+			}
+			
+			if (d[1] & 0x10) {
+				p |= INPUT_KEY2;
+			}
+			
+			if (d[1] & 0x40) {
+				p |= INPUT_KEY_HASH;
+			}
+			
+			if (d[1] & 0x80) {
+				p |= INPUT_KEY_STAR;
+			}
+			
+			input.pad[0] = p;
+			return;			
+		
+		} else if (d[0] != 0x32 && d[0] != 0x42) {
             return;
+        }
         
 		bool ir = *d++ == 0x42;
         
@@ -553,16 +718,20 @@ public:
         
 		for (int i = 0; i < 2; i++) {
             uint32_t p;
+            
             if (ir) {
                 int m = d[0] + (d[1] << 8);
                 p = generic_map(m,_generic_colecovision);
                 d += 2;
             } else
                 p = wii_map(i,_common_colecovision,_classic_colecovision);
+                
             input.pad[i] = p & 0xFF;
-            if (i == 0)
+            
+			if (i == 0)
                 input.system = p >> 8;
-            if ((p & (INPUT_PAUSE << 8)) && (p & (INPUT_START << 8)))   // start + pause == reset
+            
+			if ((p & (INPUT_PAUSE << 8)) && (p & (INPUT_START << 8)))   // start + pause == reset
                 reset++;
         }
         
@@ -598,8 +767,8 @@ public:
     }
             
     virtual int update() {
-        colecovision_frame(0);
-            
+    	// Run for 1 frame.
+        colecovision_frame(0);            
         return 0;
     }
 

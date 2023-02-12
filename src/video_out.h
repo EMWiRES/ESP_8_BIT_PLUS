@@ -641,11 +641,13 @@ void IRAM_ATTR test_wave(volatile void* vbuf, int t = 1)
 // Wait for blanking before starting drawing
 // avoids tearing in our unsynchonized world
 #ifdef ESP_PLATFORM
-void video_sync()
-{
+void video_sync() {
+  
   if (!_lines)
     return;
+    
   int n = 0;
+  
   if (_pal_) {
     if (_line_counter < _active_lines)
       n = (_active_lines - _line_counter)*1000/15600;
@@ -653,7 +655,8 @@ void video_sync()
     if (_line_counter < _active_lines)
       n = (_active_lines - _line_counter)*1000/15720;
   }
-  vTaskDelay(n+1);
+  
+  vTaskDelay( (n+1) / portTICK_PERIOD_MS );
 }
 #endif
 
