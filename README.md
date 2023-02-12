@@ -31,7 +31,7 @@ Better per pixel collision detection.
 | X | Keypad 1 |
 | Y | Keypad 2 |
 | L1 | Keypad * |
-| L2 | Keypad # |
+| R1 | Keypad # |
 | select | GUI |
 
 
