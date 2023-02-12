@@ -1,4 +1,3 @@
-
 /* Copyright (c) 2020, Peter Barrett
 **
 ** Permission to use, copy, modify, and/or distribute this software for
@@ -130,22 +129,22 @@ typedef struct {
 #define SDP_ATTR_ID_TOTAL_IMAGING_DATA_CAPACITY        0x0313 /* Imaging */
 #define SDP_ATTR_ID_SUPPORTED_REPOSITORIES             0x0314 /* PBAP */
 
-#define SDP_ATTR_HID_DEVICE_RELEASE_NUMBER    0x0200
-#define SDP_ATTR_HID_PARSER_VERSION        0x0201
-#define SDP_ATTR_HID_DEVICE_SUBCLASS        0x0202
-#define SDP_ATTR_HID_COUNTRY_CODE        0x0203
-#define SDP_ATTR_HID_VIRTUAL_CABLE        0x0204
-#define SDP_ATTR_HID_RECONNECT_INITIATE        0x0205
-#define SDP_ATTR_HID_DESCRIPTOR_LIST        0x0206
-#define SDP_ATTR_HID_LANG_ID_BASE_LIST        0x0207
+#define SDP_ATTR_HID_DEVICE_RELEASE_NUMBER    			0x0200
+#define SDP_ATTR_HID_PARSER_VERSION        				0x0201
+#define SDP_ATTR_HID_DEVICE_SUBCLASS        			0x0202
+#define SDP_ATTR_HID_COUNTRY_CODE        				0x0203
+#define SDP_ATTR_HID_VIRTUAL_CABLE        				0x0204
+#define SDP_ATTR_HID_RECONNECT_INITIATE        			0x0205
+#define SDP_ATTR_HID_DESCRIPTOR_LIST        			0x0206
+#define SDP_ATTR_HID_LANG_ID_BASE_LIST        			0x0207
 
-#define SDP_ATTR_HID_SDP_DISABLE        0x0208
-#define SDP_ATTR_HID_BATTERY_POWER        0x0209
-#define SDP_ATTR_HID_REMOTE_WAKEUP        0x020a
-#define SDP_ATTR_HID_PROFILE_VERSION        0x020b
-#define SDP_ATTR_HID_SUPERVISION_TIMEOUT    0x020c
-#define SDP_ATTR_HID_NORMALLY_CONNECTABLE    0x020d
-#define SDP_ATTR_HID_BOOT_DEVICE        0x020e
+#define SDP_ATTR_HID_SDP_DISABLE        				0x0208
+#define SDP_ATTR_HID_BATTERY_POWER        				0x0209
+#define SDP_ATTR_HID_REMOTE_WAKEUP        				0x020a
+#define SDP_ATTR_HID_PROFILE_VERSION        			0x020b
+#define SDP_ATTR_HID_SUPERVISION_TIMEOUT    			0x020c
+#define SDP_ATTR_HID_NORMALLY_CONNECTABLE    			0x020d
+#define SDP_ATTR_HID_BOOT_DEVICE        				0x020e
 
 
 static sdp_attr_id_nam_lookup_table_t sdp_attr_id_nam_lookup_table[] = {
@@ -252,11 +251,14 @@ public:
     int update()
     {
         uint8_t buf[512];
+        
         int len = l2_recv(_sdp_sock,buf,sizeof(buf));
-        if (len > 0)
+        
+		if (len > 0)
             if (add(buf,len) == 0)
                 return 0;   // complete record
-        return 1;
+        
+		return 1;
     }
 
     int u8()
@@ -406,6 +408,7 @@ public:
                     printf("SDP_DE_URL %d bytes\n",n);
                     _data += n;
                     break;
+                    
                 default:
                     PAD(level);
                     printf("unhandled type:%d skipping %d\n",t,n);
@@ -613,9 +616,11 @@ public:
     {
         if (!is_wii(d))
             return;
+            
         int slot = find_slot(d);
         if (slot == -1)
             return;     // does not have a slot yet? odd
+            
         wii_state* state = wii_states + slot;
 
         auto* h = data+2;
@@ -634,7 +639,7 @@ public:
                     state->flags &= ~0xE;             // unplugged
                 }
             }
-                break;
+            break;
 
             // wii response to memory read
             case 0x21: // Read Data
@@ -655,7 +660,7 @@ public:
                 state->flags = (state->flags & ~0xE) | flags;
                 select_input_report(d->_interrupt);
             }
-                break;
+            break;
 
             case 0x22: // Command Status
                 printf("report: %02X\n",h[2]);
@@ -667,18 +672,18 @@ public:
                     write_mem(d->_interrupt,0xA400FB,&e,1);   // disable encryption
                     state->flags |= encryption_disabled;
                 }
-                break;
+            break;
 
             // default wii report
             case 0x30:
                 select_input_report(d->_interrupt);
-                break;
+            break;
 
             case 0x32:  // core + ext
             case 0x37:  // big report
                 memcpy(state->report,data,min((int)sizeof(state->report),len));
-                //dump_report(data,len);
-                break;
+                // dump_report(data,len);
+            break;
 
             default:
                 printf("unhandled hid %02X\n",data[1]);
@@ -810,12 +815,14 @@ const char* _nams[] = {
 void InputDevice::socket_changed(int socket, int state)
 {
     printf("s:%d %s\n",socket,_nams[state]);
+    
     if ((socket == _sdp) && (state == L2CAP_OPEN))  // wait for sdp channel to be open before sending query
         start_sdp();
     else if ((socket == _control) && (state == L2CAP_OPEN)) {
         //uint8_t protocol = 0x70;    // ask for boot protocol
         //l2_send(_control,&protocol,1);
     }
+    
 }
 
 const char* InputDevice::name()
@@ -841,26 +848,35 @@ class HIDSource {
         return ((HIDSource*)ref)->cb(evt,data,len);
     }
 
+	// 8Bitdo zero2 082500 -> major 5, minor 2 -> gamepad
+	// 8Bitdo FC30 fw v4.20 082500 -> major 5, minor 2 -> gamepad.
     bool is_input_device(const uint8_t* dev_class)
     {
         int dc = (dev_class[0] << 16) | (dev_class[1] << 8) | dev_class[2];
         int major = (dc >> 8) & 0x1f;
         int minor = (dc >> 16) >> 2;
+        
+        // printf("dc: 0x%06X major: 0x%04X minor: 0x%04X\n",dc,major,minor);
 
         if (major == 5) {
+
             switch (minor & 15) {
                 case 1: return true;  // joystick
                 case 2: return true;  // gamepad
                 case 3: return true;  // remote
             }
+
             switch (minor & 0x30) {
                 case 0x10: return true; // Keyboard
                 case 0x20: return true; // Pointing device
                 case 0x30: return true; // Pointing device/keyboard
             }
+            
         }
+        
         if (dc == 0)
             return true;    // TODO. some wiimotes report 0 on reconnect
+            
         return false;
     }
 
@@ -896,7 +912,8 @@ class HIDSource {
     {
         InputDevice* d;
         const auto& cb = *((const cbdata*)data);
-        switch (evt) {
+        
+		switch (evt) {
             case CALLBACK_READY:
                 hci_start_inquiry(5);       // inquire for 5 seconds
                 break;
@@ -969,25 +986,32 @@ class HIDSource {
     {
         for (auto d : _devices) {
             if (d->_interrupt) {
-                int len = l2_recv(d->_interrupt,dst,dst_len);
-                if (len > 0) {
+                
+				int len = l2_recv(d->_interrupt,dst,dst_len);
+                
+				if (len > 0) {
                     _wii.hid(d,dst,len);
                     return len;
                 }
+                
                 if (len < 0) {
                     printf("hid shutting down TODO\n");
                     d->disconnection_complete();
                 }
+                
             }
+            
             if (d->_sdp)
                 d->update_sdp();
         }
         return 0;
     }
+    
 };
 
 
 HIDSource* _hid_source = 0;
+
 int hid_init(const char* local_name)
 {
     hid_close();
@@ -1011,6 +1035,7 @@ int hid_get(uint8_t* dst, int dst_len)
 {
     if (!_hid_source)
         return -1;
+        
     return _hid_source->get(dst,dst_len);
 }
 
@@ -1018,7 +1043,8 @@ int hid_get(uint8_t* dst, int dst_len)
 uint32_t wii_map(int index, const uint32_t* common, const uint32_t* classic)
 {
     uint32_t f = wii_states[index].flags;
-    if (!(f & wiimote))
+    
+	if (!(f & wiimote))
         return 0;
 
     uint32_t r = 0;
@@ -1027,6 +1053,7 @@ uint32_t wii_map(int index, const uint32_t* common, const uint32_t* classic)
         if (pad & (0x8000 >> i))
             r |= common[i];
     }
+    
     if (classic && (f & classic_controller)) {
         pad = wii_states[index].classic();
         for (int i = 0; i < 16; i++) {
@@ -1034,5 +1061,7 @@ uint32_t wii_map(int index, const uint32_t* common, const uint32_t* classic)
                 r |= classic[i];
         }
     }
+    
     return r;
 }
+

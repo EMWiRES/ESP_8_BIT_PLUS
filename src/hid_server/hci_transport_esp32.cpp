@@ -34,12 +34,14 @@ hci_handle hci_open()
         if (_hci_transport.handler)
             _hci_transport.handler(&_hci_transport,data,len,_hci_transport.handler_ref);
     };
+    
     _hci_transport._cb.notify_host_send_available = []() {
         if (_hci_transport.ready_handler)
             _hci_transport.ready_handler(&_hci_transport,_hci_transport.ready_handler_ref);
     };
 
     esp_vhci_host_register_callback(&_hci_transport._cb); // open for buisness
+    
     return &_hci_transport;
 }
 
@@ -73,6 +75,7 @@ int  hci_send_available(hci_handle h)
 
 // store and load link keys
 uint32_t _nvs_handle = 0;
+
 static uint32_t open_nvs()
 {
     nvs_open("esp_8_bit", NVS_READWRITE, &_nvs_handle);
@@ -93,10 +96,14 @@ static uint32_t open_nvs()
 int sys_get_pref(const char* key, char* value, int max_len)
 {
     value[0] = 0;
-    uint32_t h = open_nvs();
-    if (!h)
+    
+	uint32_t h = open_nvs();
+    
+	if (!h)
         return 0;
-    size_t s = max_len;
+    
+	size_t s = max_len;
+    
     if (ESP_OK == nvs_get_str(h, key, value, &s)) {
        // printf("sys_get_pref %s:%s %d\n",key,value,(int)s);
         return (int)s;
@@ -107,11 +114,14 @@ int sys_get_pref(const char* key, char* value, int max_len)
 void sys_set_pref(const char* key, const char* value)
 {
     uint32_t h = open_nvs();
-    if (!h)
+    
+	if (!h)
         return;
-    //printf("sys_set_pref %s:%s\n",key,value);
+    
+	//printf("sys_set_pref %s:%s\n",key,value);
     if (ESP_OK == nvs_set_str(h, key, value))
         nvs_commit(h);
     else
         printf("sys_set_pref %s:%s failed (key length <= 15?)\n",key,value);
 }
+

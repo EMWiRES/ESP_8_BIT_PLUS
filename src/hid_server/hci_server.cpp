@@ -1,4 +1,3 @@
-
 /* Copyright (c) 2020, Peter Barrett
 **
 ** Permission to use, copy, modify, and/or distribute this software for
@@ -111,8 +110,8 @@ using namespace std;
 const char* hci_cmd(int c)
 {
     switch (c) {
-        case HCI_READ_BUFFER_SIZE:  return "HCI_READ_BUFFER_SIZE";
-        case HCI_READ_BD_ADDR:      return "HCI_READ_BD_ADDR";
+        case HCI_READ_BUFFER_SIZE:  	return "HCI_READ_BUFFER_SIZE";
+        case HCI_READ_BD_ADDR:      	return "HCI_READ_BD_ADDR";
 
         case HCI_RESET:                 return "HCI_RESET";
         case HCI_READ_STORED_LINK_KEY:  return "HCI_READ_STORED_LINK_KEY";
@@ -139,7 +138,8 @@ const char* hci_cmd(int c)
         case HCI_AUTHENTICATION_REQUESTED:      return "HCI_AUTHENTICATION_REQUESTED";
         case HCI_REMOTE_NAME_REQUEST:           return "HCI_REMOTE_NAME_REQUEST";
     }
-    static char s[32];
+    
+	static char s[32];
     sprintf(s,"HCICMD:%04X",c);
     return s;
 }
@@ -199,11 +199,11 @@ typedef struct {
 } __attribute__((packed)) hci_adv_params;
 
 typedef struct {
-    u8 scan_type; // 0: passive 1: active
-    u16 scan_interval; // * 0.625 ms
-    u16 scan_window; // * 0.625 ms
-    u8 own_addr_type; // 0:public 1:random
-    u8 filter_policy; // 0:all
+    u8 scan_type; 		// 0: passive 1: active
+    u16 scan_interval; 	// * 0.625 ms
+    u16 scan_window; 	// * 0.625 ms
+    u8 own_addr_type; 	// 0:public 1:random
+    u8 filter_policy; 	// 0:all
 } __attribute__((packed)) hci_scan_parameters;
 
 typedef struct {
@@ -341,6 +341,7 @@ public:
     {
         return _read == _write;
     }
+    
     bool read(vector<uint8_t>& d)
     {
         lock_guard<mutex> lock(_mutex);
@@ -460,12 +461,20 @@ public:
     {
     }
 
+	// The 8bitdo zero 2 is identifying as "Pro Controller".
+	// The FC30 is identifiying as "8Bitdo FC30 GamePad"
+	// 8Bitdo zero2 fw v1.69 082500 -> major 5, minor 2 -> gamepad
+	// 8Bitdo FC30 fw v4.20 082500 -> major 5, minor 2 -> gamepad.
     bool is_wii()
     {
+    	// printf("dev class found: 0x%08X",_dev_class);
+    	
         if (_name.find("Nintendo") == 0)
             return true;
+            
         if (_dev_class == 0x042500 || _dev_class == 0x080500)
             return true;
+            
         return false;
     }
 
@@ -531,9 +540,12 @@ public:
     bool data(const l2cap_data* p)
     {
         int pt = p->handle >> 12;
+        
         const uint8_t* data = ((const uint8_t*)p) + 5;
-        int len = p->length;
-        if (pt == 2) {  // start of a packet
+        
+		int len = p->length;
+        
+		if (pt == 2) {  // start of a packet
             _packet.resize(p->l2capLength); // length of payload
             _packet_cid = p->cid;
             data += 4;
@@ -652,15 +664,14 @@ public:
                     }
                 }
             }
-
-                break;
+            break;
 
             case L2CAP_INFO_REQ:
             {
                 u16 p[2] = {c->params[0],1};  // no info
                 l2cap(L2CAP_INFO_RSP,c->id,p,2);
             }
-                break;
+            break;
 
             default:
                 PRINTF("%02X l2cap weird %d %s\n",c->cmd,c->cmdLength,L2CAP_ComandCodeStr(c->cmd));
@@ -814,11 +825,15 @@ public:
         auto* s = get_socket(scid);
         if (!s)
             return -1;
+            
         vector<uint8_t> d;
         if (!s->_q.read(d))
             return 0;
+            
         len = min(len,(int)d.size());
+        
         memcpy(dst,&d[0],len);
+        
         return len;
     }
 
@@ -852,6 +867,7 @@ public:
     HCI(const char* localname) : _localname(localname),_state(-1),_cid(0x40)
     {
         _hci = hci_open();
+        
         if (!_hci)
             PRINTF("hci_open failed\n");
         else {
@@ -901,13 +917,18 @@ public:
         // handle any inbound.
         // hcl/acl ordering challenge. TODO.
         while (_rx.read(buf)) {
-            TRACE(0,&buf[0],(int)buf.size());
-            switch (buf[0]) {
-                case 0x2: acl(&buf[0],(int)buf.size()); break;
+            
+			TRACE(0,&buf[0],(int)buf.size());
+            
+			switch (buf[0]) {
+                
+				case 0x2: acl(&buf[0],(int)buf.size()); break;
                 case 0x4: hci(buf[1],&buf[3],buf[2]); break;
-                default:
+                
+				default:
                     PRINTF("bad hci packet\n");
             }
+            
         }
         return 0;
     }
@@ -1145,6 +1166,7 @@ private:
         auto* d = get_device((bdaddr_t*)data);
         uint8_t buf[6+1+16] = {0};
         memcpy(buf,data,6);
+        
         if (d->is_wii()) {
             buf[6] = 6;
             //memcpy(buf+7,data,6);           // 1+2 buttons pressed
@@ -1156,7 +1178,8 @@ private:
             buf[9] = '0';
             buf[10] = '0';
             sys_msg("enter '0000' on keyboard to pair");
-        }
+		}
+		
         return cmd(HCI_PIN_CODE_REQUEST_REPLY,buf,sizeof(buf));
     }
 
@@ -1169,11 +1192,13 @@ private:
     void hci(uint8_t evt, const uint8_t* data, uint8_t len)
     {
         PRINTF("%s %d bytes\n",hci_evt(evt),len);
+        
         switch (evt) {
-            case HCI_INQUIRY_COMP_EVT:
+            
+			case HCI_INQUIRY_COMP_EVT:
                 _state &= ~MASK_INQUIRY;
                 _callback(CALLBACK_INQUIRY_DONE,NULL,0,_callback_ref);
-                break;
+            break;
 
             case HCI_INQUIRY_RESULT_EVT:
             {
@@ -1185,12 +1210,12 @@ private:
                     data += 14;
                 }
             }
-                break;
+            break;
 
             case HCI_CONNECTION_COMP_EVT:
                 connection_complete((const connection_info*)data);
                 dongle_bug();
-                break;
+            break;
 
             case HCI_AUTHENTICATION_COMP_EVT:
             {
@@ -1201,7 +1226,7 @@ private:
                     _callback(CALLBACK_AUTHENTICATION_COMPLETE,&aci,sizeof(aci),_callback_ref);
                 }
             }
-                break;
+            break;
 
             case HCI_CONNECTION_REQUEST_EVT:
             {
@@ -1209,7 +1234,7 @@ private:
                 connection_request(ci);
                 _callback(CALLBACK_CONNECTION_REQUEST,data,len,_callback_ref);
             }
-                break;
+            break;
 
             case HCI_DISCONNECTION_COMP_EVT:
             {
@@ -1219,18 +1244,18 @@ private:
                     _callback(CALLBACK_DISCONNECTION_COMP,d->_addr.b,6,_callback_ref);
                 }
             }
-                break;
+            break;
 
             case HCI_RMT_NAME_REQUEST_COMP_EVT:
             {
                 remote_name_response((const remote_name_info*)data);
                 _callback(CALLBACK_REMOTE_NAME,data,len,_callback_ref);
-                break;
             }
+            break;
 
             case HCI_PIN_CODE_REQUEST_EVT:
                 pincode_reply(data);
-                break;
+            break;
 
             case HCI_ROLE_CHANGE_EVT:
             {
@@ -1239,7 +1264,7 @@ private:
                 if (d)
                     d->set_role(rc->role);
             }
-                break;
+            break;
 
             // reject link keys, go with pins instead
             case HCI_LINK_KEY_REQUEST_EVT:
@@ -1256,14 +1281,15 @@ private:
                     }
                 }
             }
-                break;
+            break;
 
             case HCI_COMMAND_COMPLETE_EVT:
             {
                 int c = data[1] | (data[2] << 8);
                 int status = data[3];
                 PRINTF(" -> %s %04X %s\n",hci_cmd(c),c,hci_status_str(status));
-                switch (c) {
+                
+				switch (c) {
                     //  Init phase 0
                     case HCI_RESET:
                         cmd(HCI_READ_BUFFER_SIZE);
@@ -1332,19 +1358,24 @@ private:
                         break;
                 }
             }
-                 break;
+            break;
+                 
             case HCI_HARDWARE_ERROR_EVT:
-                break;
+            break;
+                
             case HCI_COMMAND_STATUS_EVT:    // after starting inquiry/connect etc
             {
                 int cmd = data[2] + (data[3] << 8);
                 PRINTF(" -> %s %04X %s\n",hci_cmd(cmd),cmd,hci_status_str(data[0]));
             }
-                break;
+            break;
+                
             case HCI_QOS_SETUP_COMP_EVT:
                 break;
+                
             case HCI_NUM_COMPL_DATA_PKTS_EVT:
                 break;
+                
             case HCI_MODE_CHANGE_EVT:
                 break;
 
@@ -1354,9 +1385,11 @@ private:
             case HCI_LINK_KEY_NOTIFICATION_EVT:
                 write_link_key((const bdaddr_t*)data,data+6);
                 break;
+                
             default:
                 PRINTF("unhandled hci case\n");
         }
+        
     }
 
     // USB dongle bug
@@ -1372,8 +1405,10 @@ private:
     void acl(const uint8_t* data, int len)
     {
         l2cap_data* p = (l2cap_data*)data;
-        int h = p->handle & 0x0FFF;
-        for (auto d : _devices) {
+        
+		int h = p->handle & 0x0FFF;
+        
+		for (auto d : _devices) {
             if (h == d->_handle) {
                 d->data(p);
                 return;
@@ -1388,6 +1423,7 @@ private:
         memcpy(&_dongle_bug[0],data,len);
     }
 };
+
 HCI* _hci = 0;
 
 void hci_socket_change(const bdaddr_t& addr, int scid, int state)
