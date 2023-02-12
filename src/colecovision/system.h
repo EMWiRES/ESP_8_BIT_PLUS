@@ -20,6 +20,10 @@
 #define INPUT_RIGHT       (0x00000008)
 #define INPUT_BUTTON2     (0x00000020)
 #define INPUT_BUTTON1     (0x00000040)
+#define INPUT_KEY1		  (0x00000080)
+#define INPUT_KEY2        (0x00000100)
+#define INPUT_KEY_HASH    (0x00000200)
+#define INPUT_KEY_STAR    (0x00000400)
 
 /* These can be used for 'input.system' */
 #define INPUT_START       (0x00000001)    /* Game Gear only */    
@@ -44,7 +48,7 @@ typedef struct {
 
 /* Game image structure */
 typedef struct {
-    uint8 rom[32768];
+    uint8 rom[32*1024];
     // uint8 *rom;
     uint8 bios[8192];
     // uint8 *bios;

@@ -4107,6 +4107,7 @@ void z80_reset(void *param)
 	_F = ZF;			/* Zero flag is set */
 	Z80.request_irq = -1;
 	Z80.service_irq = -1;
+	Z80.nmi_pending = 0;
     Z80.nmi_state = CLEAR_LINE;
 	Z80.irq_state = CLEAR_LINE;
 
@@ -4142,6 +4143,18 @@ int z80_execute(int cycles)
 {
 	z80_ICount = cycles - Z80.extra_cycles;
 	Z80.extra_cycles = 0;
+
+	if (Z80.nmi_pending == 1) {
+		_PPC = -1;			/* there isn't a valid previous program counter */
+		LEAVE_HALT; 		/* Check if processor was halted */
+	
+		_IFF1 = 0;
+	    PUSH( PC );
+		_PCD = 0x0066;
+		Z80.extra_cycles += 11;
+		
+		Z80.nmi_pending = 0;
+	}
 
     do
 	{
@@ -4313,18 +4326,11 @@ void z80_set_reg (int regnum, unsigned val)
  ****************************************************************************/
 void z80_set_nmi_line(int state)
 {
-	if( Z80.nmi_state == state ) return;
-
-    Z80.nmi_state = state;
-	if( state == CLEAR_LINE ) return;
-
-	_PPC = -1;			/* there isn't a valid previous program counter */
-	LEAVE_HALT; 		/* Check if processor was halted */
-
-	_IFF1 = 0;
-    PUSH( PC );
-	_PCD = 0x0066;
-	Z80.extra_cycles += 11;
+	/* mark an NMI pending on the rising edge */
+	if ( (Z80.nmi_state == CLEAR_LINE) && (state == ASSERT_LINE) )
+		Z80.nmi_pending = 1;
+		
+	Z80.nmi_state = state;
 }
 
 /****************************************************************************
@@ -4335,6 +4341,9 @@ void z80_set_irq_line(int irqline, int state)
     Z80.irq_state = state;
 	if( state == CLEAR_LINE ) return;
 
+	// Always leave HALT
+	// LEAVE_HALT;
+	
 	if( Z80.irq_max )
 	{
 		int daisychain, device, int_state;

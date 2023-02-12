@@ -66,6 +66,7 @@ typedef struct {
 /* 44 */    Z80_DaisyChain irq[Z80_MAXDAISY];
 /* 84 */    int     (*irq_callback)(int irqline);
 /* 88 */    int     extra_cycles;       /* extra cycles for interrupts */
+			UINT8   nmi_pending;
 }   Z80_Regs;
 
 extern Z80_Regs *Z80_Context;

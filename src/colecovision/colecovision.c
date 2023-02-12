@@ -1,5 +1,12 @@
 /*
  * New emulator main file.
+ *
+ * Based on ESP_8_BIT https://github.com/rossumur/ESP_8_BIT.
+ *
+ * (c) 2023 EMWiRES / Allard van der Bas.
+ *
+ * Stripped back as much as possible to use as a template for further development.
+ *
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +18,7 @@
 #include "sn76496.h"
 #include "tms9918.h"
 #include "system.h"
+#include "fakeAY.h"
 
 /* Colecovision context */
 t_colecovision colecovision;
@@ -18,6 +26,15 @@ t_colecovision colecovision;
 tms9918 *cv_vdp=NULL;
 
 int is_joystick;
+int SGM_RAM = 0;
+int BIOS_RAM = 0;
+
+unsigned char ay_reg_idx = 0;
+unsigned char ay_reg[16];
+
+int bankMask;
+int currentBank;
+int doBanking=0;
 
 unsigned char *colecovision_get_video(void) {
 	return(cv_vdp->videoout);
@@ -49,15 +66,14 @@ void colecovision_reset(void) {
 	// Reset the RAM.
     memset(colecovision.ram, 0, 0x400);
     
-    // cart.bios = ColecoRom;
-    // Map the bios rom.
-    // colecovision.bios = cart.bios;
+    memset(colecovision.SGMram,0,0x8000);
     
-    // No ints pending.
-    colecovision.irq = 0x00;
+    SGM_RAM = 0;
+    BIOS_RAM = 0x0F;
+    currentBank = 0;
     
-    // Map the cartridge.
-    // colecovision.cartridge = cart.rom;
+    memset(ay_reg,0,16);
+    ay_reg_idx = 0x00;
     
     if (!cv_vdp) {
     	cv_vdp = tms9918_create();
@@ -95,16 +111,48 @@ void cpu_reset(void) {
 void cpu_writemem16(int address, int data) {
 	/* printf("Write mem: 0x%04X 0x%02X\n",address,data); */
 	
-	if ( (address & 0xE000) == 0x6000 ) {
-		colecovision.ram[address&0x3FF] = data;
+	if (address < 0x2000) {
+		if (BIOS_RAM == 0x0F) {
+			return;
+		} else {
+			colecovision.SGMram[address] = data;
+			return;
+		}
+	} else if (address < 0x8000) {
+		if (SGM_RAM) {
+			colecovision.SGMram[address] = data;
+		} else {
+			if ( (address & 0xE000) == 0x6000 ) {
+				colecovision.ram[address&0x3FF] = data;
+			}
+		}
+	} else {
+		// printf("Illegal access: 0x%04X,0x%02X\n",address,data);
 	}
 	
 }
 
 /* Write to an I/O port */
 void cpu_writeport(int address, int data) {
-    
-	if ((address & 0xe0) == 0x80) {
+
+    if ( (address & 0xFF) == 0x50) {
+    	
+		FakeAY_WriteIndex(data);
+    	
+	} else  if ( (address & 0xFF) == 0x51) {
+    	
+		FakeAY_WriteData(data);
+    	
+	} else if ( (address & 0xFF) == 0x7F) {
+    	
+    	// printf("BIOS RAM access 0x%04X,0x%02X\n",address,data);
+		BIOS_RAM = data;
+		
+	} else if ( (address & 0xFF) == 0x53) {
+		// printf("SGM RAM access 0x%04X,0x%02X\n",address,data);
+		SGM_RAM = data;
+		
+	} else if ((address & 0xe0) == 0x80) {
 		
 		/* set controls to keypad mode */
 		/* printf("Set controls to keypad mode.\n"); */
@@ -121,6 +169,7 @@ void cpu_writeport(int address, int data) {
 	    	/* printf("tms9918_writeport0(0x%02X)\n",data); */
 	    	
 	    	tms9918_writeport0(cv_vdp,data);
+	    	
 		}
 		
     } else if ((address & 0xe0) == 0xc0) {
@@ -131,13 +180,11 @@ void cpu_writeport(int address, int data) {
 		
     } else if ((address & 0xe0) == 0xe0) {
 		
-		/* printf("sms_psg_write 0x%02X\n",data); */
-		
 		SN76496Write(0,data);
-		
+
     } else {
 		
-		/* printf("cv_io_write: 0x%02x = 0x%02x.\n", address & 0xff, data); */
+		// printf("cv_io_write: 0x%02x = 0x%02x.\n", address & 0xff, data);
 		
     }
     
@@ -147,8 +194,13 @@ void cpu_writeport(int address, int data) {
 /* Read from an I/O port */
 int cpu_readport(int address) {
 	unsigned char answer;
-	
-    if ((address & 0xe0) == 0xa0) {
+
+	if ( (address & 0xFF) == 0x52) {
+		
+		// printf("Reading psg index: 0x%02X\n",psg_index);
+		return( FakeAY_ReadData() );
+		
+	} else if ((address & 0xe0) == 0xa0) {
 		
 		if (address & 1) {
 	    	return tms9918_readport1(cv_vdp);
@@ -199,38 +251,47 @@ int cpu_readport(int address) {
 		} else {
 			
 	    	if (is_joystick) {
-	    		answer = 0;
+	    		answer = 0x7F;
 	    		
 	    		if (input.pad[0] & INPUT_UP)
-					answer |= 0x01;
+					answer &= 0xFE;
 					
 				if (input.pad[0] & INPUT_DOWN)
-					answer |= 0x04;
+					answer &= 0xFB;
 					
 				if (input.pad[0] & INPUT_LEFT)
-					answer |= 0x08;
+					answer &= 0xF7;
 					
 				if (input.pad[0] & INPUT_RIGHT)
-					answer |= 0x02;
-					
+					answer &= 0xFD;
+
 				if (input.pad[0] & INPUT_BUTTON2)
-					answer |= 0x40;
-				
-				answer = ~answer;
+					answer &= 0xBF;
 					    		
 				/* joystick mode */
 				return( answer );
-				
+
 			} else {
 				
-				answer = 0;
-				if (input.pad[0] & INPUT_BUTTON1)
-					answer = 0x02;	// 1
+				answer = 0x70;
+				if (input.pad[0]&INPUT_BUTTON1) {
+					answer &= 0xbf;
+				}		
 					
-				answer = ~answer;
+				if (input.pad[0] & INPUT_KEY1)
+					return (answer | 0x0d);	// 1
+					
+				if (input.pad[0] & INPUT_KEY2)
+					return (answer | 0x07);
+					
+				if (input.pad[0] & INPUT_KEY_STAR)
+					return (answer | 0x09);
+					
+				if (input.pad[0] & INPUT_KEY_HASH)
+					return (answer | 0x06);
 					
 				/* keypad mode */
-				return( answer );
+				return( answer | 0x0F);
 			}
 	    	
 		}
@@ -244,19 +305,58 @@ int cpu_readport(int address) {
 
 int cpu_readmem16(int address) {
 	/* printf("Read mem: 0x%04X\n",address); */
-	
 	if (address < 0x2000) {
-		return(cart.bios[address]);
+		
+		if (BIOS_RAM == 0x0F) {
+			return(cart.bios[address]);
+		} else {
+			return(colecovision.SGMram[address]);
+		}
+		
+	} else if (address < 0x6000) {
+		
+		if (SGM_RAM) {
+			return(colecovision.SGMram[address]);
+		} else {
+			return(0);			
+		}
+
+	} else if (address < 0x8000) {
+		
+		if (SGM_RAM) {
+			return( colecovision.SGMram[address]);	
+		} else {
+			return( colecovision.ram[address & 0x3FF] );
+		}
+		
 	}
-	
-	if (address < 0x6000) {
-		return(0);
+
+	if (doBanking) {
+		
+		if (address >= 0xFFC0) {
+			
+			// printf("Bank access 0x%04X this is bank %d\n",address,address & bankMask);
+			
+			currentBank = address & bankMask;
+			
+			return(cart.rom[bankMask*16384 + (address & 0x3FFF)]);
+			
+		} if (address < 0xC000) {
+			
+			// Get it from the top of the ROM.
+			return(cart.rom[bankMask*16384 + (address & 0x3FFF)]);
+			
+		} else {
+			
+			return(cart.rom[currentBank*16384 + (address & 0x3FFF)]);
+			
+		}
+		
+	} else {
+		
+		return(cart.rom[address & 0x7FFF]);
+		
 	}
-	
-	if (address < 0x8000) {
-		return( colecovision.ram[address & 0x3FF] );
-	}
-	
-	return(cart.rom[address & 0x7FFF]);
+
 }
 

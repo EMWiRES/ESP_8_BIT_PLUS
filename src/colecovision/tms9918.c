@@ -2,9 +2,9 @@
  * tms9918.c
  *
  * tms9918 VDP emulation.
+ *
+ * Added per pixel sprite collision detection fixes Aztec Challenge.
  */
-
-/* $Id: tms9918.c,v 1.24 2000/11/23 16:22:23 nyef Exp $ */
 
 #include <stdlib.h>
 #include <string.h>
@@ -40,19 +40,38 @@
     15 - White
 */
 
-int tms9918_palbase_red[16] = {
+/* Old values */
+/*
+const int tms9918_palbase_red[16] = {
     0x00, 0x00, 0x22, 0x66, 0x22, 0x44, 0xbb, 0x44,
     0xff, 0xff, 0xdd, 0xdd, 0x22, 0xdd, 0xbb, 0xff,
 };
 
-int tms9918_palbase_green[16] = {
+const int tms9918_palbase_green[16] = {
     0x00, 0x00, 0xdd, 0xff, 0x22, 0x66, 0x22, 0xdd,
     0x22, 0x66, 0xdd, 0xdd, 0x99, 0x44, 0xbb, 0xff,
 };
 
-int tms9918_palbase_blue[16] = {
+const int tms9918_palbase_blue[16] = {
     0x00, 0x00, 0x22, 0x66, 0xff, 0xff, 0x11, 0xff,
     0x22, 0x66, 0x22, 0x66, 0x22, 0xbb, 0xbb, 0xff,
+}; */
+
+
+/* New values from WikiPedia */
+const int tms9918_palbase_red[16] = {
+    0x00, 0x00, 0x0A, 0x34, 0x2B, 0x51, 0xBD, 0x1E,
+    0xFB, 0xFF, 0xBD, 0xD7, 0x0A, 0xAF, 0xB2, 0xff
+};
+
+const int tms9918_palbase_green[16] = {
+    0x00, 0x00, 0xAD, 0xC8, 0x2D, 0x4B, 0x29, 0xE2,
+    0x2C, 0x5F, 0xA2, 0xB4, 0x8C, 0x32, 0xB2, 0xff
+};
+
+const int tms9918_palbase_blue[16] = {
+    0x00, 0x00, 0x1E, 0x4C, 0xE3, 0xFB, 0x25, 0xEF,
+    0x2B, 0x4C, 0x2B, 0x54, 0x18, 0x9A, 0xB2, 0xff
 };
 
 unsigned char tms9918_readport0(tms9918 *vdp) {
@@ -71,15 +90,10 @@ unsigned char tms9918_readport1(tms9918 *vdp) {
 
     retval = vdp->status;
     
-    vdp->status &= 0x1f;
+    vdp->status &= 0x1f;			// Keep fifth sprite active.
     vdp->flags &= ~TF_ADDRWRITE;
 
-	if (colecovision.irq) {
-		
-		colecovision.irq = 0;
-		z80_set_nmi_line(CLEAR_LINE);
-		
-	}
+	z80_set_nmi_line(CLEAR_LINE);
 
     return retval;
 }
@@ -95,6 +109,25 @@ void tms9918_writeport1(tms9918 *vdp, unsigned char data) {
     if (vdp->flags & TF_ADDRWRITE) {
 		if (data & 0x80) {
 		    vdp->regs[data & 7] = vdp->addrsave;
+		    
+		    // Are we setting the IRQ enable and do we have a vblank pending?
+		    if ( (data & 7) == 1 ) {
+		    	
+		    	if (vdp->addrsave & 0x20) {
+		    		
+		    		if (vdp->status & 0x80) {
+		    			
+		    			if (vdp->scanline != 192) {
+		    				// Trigger an interrupt.
+		    				z80_set_nmi_line(ASSERT_LINE);
+						}
+						
+					}
+					
+				}
+				
+			}
+		    
 		} else {
 		    vdp->address = (vdp->addrsave | (data << 8)) & 0x3fff;
 		    if (!(data & 0x40)) {
@@ -172,34 +205,76 @@ int tms9918_cache_sprites(tms9918 *vdp, struct sprite_cache *cache, int sprite_s
     return num_sprites;
 }
 
+/*
+ * Check individual sprite data lines for bit overlaps.
+ */
+int tms9918_check_sprite_overlap(struct sprite_cache sprite1,struct sprite_cache sprite2,int sprite_size) {
+	int distance;
+	
+	unsigned short sprite1_pattern;
+	unsigned short sprite2_pattern;
+
+	if (sprite_size == 8) {
+		sprite1_pattern = sprite1.pattern[0];
+		sprite2_pattern = sprite2.pattern[0];
+	} else {
+		sprite1_pattern = sprite1.pattern[0];
+		sprite1_pattern <<= 8;
+		sprite1_pattern |= sprite1.pattern[16];
+		
+		sprite2_pattern = sprite2.pattern[0];
+		sprite2_pattern <<= 8;
+		sprite2_pattern |= sprite2.pattern[16];
+	}
+	
+	if (sprite1.x_pos >= sprite2.x_pos) {
+		distance = sprite1.x_pos - sprite2.x_pos;
+		sprite1_pattern >>= distance;
+	} else {
+		distance = sprite2.x_pos - sprite1.x_pos;
+		sprite2_pattern >>= distance;
+	}
+	
+	// Any pixels overlap?
+	sprite1_pattern &= sprite2_pattern;
+	
+	// Any bits on?
+	if (sprite1_pattern > 0) {
+		return(1);
+	} else {
+		return(0);
+	}
+}
+
 int tms9918_check_sprite_collision(tms9918 *vdp, struct sprite_cache *cache, int sprite_size, int num_sprites) {
+	
     switch (num_sprites) {
     	case 4:
 			/* NOTE: & 0x1ff here is to ensure that the result is positive */
 			if (((cache[3].x_pos - cache[2].x_pos) & 0x1ff) < sprite_size) {
-			    return 1;
+			    return(tms9918_check_sprite_overlap(cache[3],cache[2],sprite_size));
 			}
 			
 			if (((cache[3].x_pos - cache[1].x_pos) & 0x1ff) < sprite_size) {
-			    return 1;
+			    return(tms9918_check_sprite_overlap(cache[3],cache[1],sprite_size));
 			}
 			
 			if (((cache[3].x_pos - cache[0].x_pos) & 0x1ff) < sprite_size) {
-			    return 1;
+			    return(tms9918_check_sprite_overlap(cache[3],cache[0],sprite_size));
 			}
 
 	    case 3:
 			if (((cache[2].x_pos - cache[1].x_pos) & 0x1ff) < sprite_size) {
-			    return 1;
+			    return(tms9918_check_sprite_overlap(cache[2],cache[1],sprite_size));
 			}
 			
 			if (((cache[2].x_pos - cache[0].x_pos) & 0x1ff) < sprite_size) {
-			    return 1;
+			    return(tms9918_check_sprite_overlap(cache[2],cache[0],sprite_size));
 			}
 
 	    case 2:
 			if (((cache[1].x_pos - cache[0].x_pos) & 0x1ff) < sprite_size) {
-			    return 1;
+			    return(tms9918_check_sprite_overlap(cache[1],cache[0],sprite_size));
 			}
 
 	    case 1:
@@ -207,6 +282,7 @@ int tms9918_check_sprite_collision(tms9918 *vdp, struct sprite_cache *cache, int
 		/* not enough sprites to collide */
 		return 0;
     }
+    
 }
 
 void tms9918_render_sprites(tms9918 *vdp, unsigned char *cur_vbp)
@@ -219,6 +295,9 @@ void tms9918_render_sprites(tms9918 *vdp, unsigned char *cur_vbp)
     sprite_size = (vdp->regs[1] & 0x02)? 16: 8;
     
     num_sprites = tms9918_cache_sprites(vdp, cache, sprite_size);
+
+	// Clear collision flag.
+	// vdp->status &= ~0x20;
 
     if (tms9918_check_sprite_collision(vdp, cache, sprite_size, num_sprites)) {
 		vdp->status |= 0x20; /* sprite collision flag */
@@ -464,6 +543,12 @@ void tms9918_render_line_mode_1(tms9918 *vdp) {
 	*cur_vbp++ = color0;
 }
 
+/*
+ * There was a bug affecting Uridium, Bagman and Tankwars.
+ *
+ * It was not selecting the correct color table
+ * for the second and third screen block.
+ */
 void tms9918_render_line_mode_2(tms9918 *vdp) {
     unsigned char *cur_vbp;
     unsigned char *nametable;
@@ -476,27 +561,42 @@ void tms9918_render_line_mode_2(tms9918 *vdp) {
     
     // cur_vbp = video_get_vbp(vdp->scanline);
     cur_vbp = vdp->videoout + (vdp->scanline * 256);
-    nametable = vdp->memory + ((vdp->regs[2] & 0x0f) << 10);
+    
+	nametable = vdp->memory + ( (vdp->regs[2] & 0x0f ) << 10 );
 
-    patterntable = vdp->memory + ((vdp->regs[4] & 0x04)? 0x2000: 0);
-    colortable = vdp->memory + ((vdp->regs[3] & 0x80)? 0x2000: 0);
+    colortable = vdp->memory + ( (vdp->regs[3] & 0x80) ? 0x2000: 0);
+    patterntable = vdp->memory + ( (vdp->regs[4] & 0x04) ? 0x2000: 0);
+
     patterntable += vdp->scanline & 7;
     colortable += vdp->scanline & 7;
-    if (vdp->scanline >= 0x80) {
+    
+   if (vdp->scanline >= 0x80) {
+		
 		if (vdp->regs[4] & 0x02) {
 		    patterntable += (0x200 << 3);
-		    colortable += (0x200 << 3);
+		    // colortable += (0x200 << 3);
 		}
-	    } else if (vdp->scanline >= 0x40) {
+		
+		if (vdp->regs[3] & 0x40) {
+			colortable += (0x200 << 3);
+		}
+		
+	} else if (vdp->scanline >= 0x40) {
+		
 		if (vdp->regs[4] & 0x01) {
 		    patterntable += (0x100 << 3);
-		    colortable += (0x100 << 3);
+		    // colortable += (0x100 << 3);
 		}
-	    }
+		
+		if (vdp->regs[3] & 0x20) {
+			colortable += (0x100 << 3);
+		}
+			
+	}
 	    
-	    nametable += (vdp->scanline & ~7) << 2;
+    nametable += (vdp->scanline & ~7) << 2;
 	    
-	    for (i = 0; i < 32; i++) {
+	for (i = 0; i < 32; i++) {
 		pattern = patterntable[nametable[i] << 3];
 		color0 = vdp->palette[colortable[nametable[i] << 3] & 0x0f];
 		color1 = vdp->palette[colortable[nametable[i] << 3] >> 4];
@@ -541,6 +641,7 @@ void tms9918_render_line_mode_2(tms9918 *vdp) {
 		    *cur_vbp++ = color0;
 		}
     }
+    
 }
 
 void tms9918_render_line_mode_3(tms9918 *vdp) {
@@ -649,39 +750,19 @@ int tms9918_periodic(tms9918 *vdp,int scanline) {
 		tms9918_render_line(vdp);
 				
     } else if (scanline == 192) {
-		
+					
 		vdp->status |= 0x80; /* signal vblank */
-		
+
 		// Interrupt enabled?
 		if (vdp->regs[1] & 0x20) {
-			
-			// Not already active?
-			if (colecovision.irq == 0) {
-				colecovision.irq = 1;
-				
-				// Vblank interrupt.
-				z80_set_nmi_line(ASSERT_LINE);
-			}
-			
+			// Vblank interrupt.
+			z80_set_nmi_line(ASSERT_LINE);
 		}
-		
-    } else {
-    	// Still in vblank.
-    	
+	
 	}
     
-
-    if (vdp->scanline == 261) {
-    	
-    	// Out of vblank.
-		vdp->scanline = 0;
-		
-    } else {
-		
-		vdp->scanline++;
-		
-	}
-
+	vdp->scanline++;
+    
     return (vdp->status & 0x80) && (vdp->regs[1] & 0x20);
 }
 
@@ -725,81 +806,3 @@ tms9918 *tms9918_create(void) {
     return retval;
 }
 
-/*
- * $Log: tms9918.c,v $
- * Revision 1.24  2000/11/23 16:22:23  nyef
- * added preliminary mode 1 line renderer
- *
- * Revision 1.23  2000/08/26 00:57:15  nyef
- * removed all reference to sms_psg (moved out to the driver level)
- *
- * Revision 1.22  2000/01/18 01:43:17  nyef
- * fixed bugs in the handling of invisible sprites and right clipped sprites
- *
- * Revision 1.21  2000/01/15 21:35:39  nyef
- * added preliminary implementation of sprite collision (not tested)
- *
- * Revision 1.20  2000/01/15 20:59:49  nyef
- * hacked in something to handle transparent colors in the background
- *
- * Revision 1.19  2000/01/15 20:24:07  nyef
- * added clipping of sprites to the screen edges
- *
- * Revision 1.18  2000/01/15 19:29:28  nyef
- * added mode 3 emulation from AmiDog (not tested)
- *
- * Revision 1.17  2000/01/15 19:25:36  nyef
- * fixed a bug with the pattern table in tms9918_render_line_mode_0()
- *
- * Revision 1.16  2000/01/15 17:58:27  nyef
- * added (untested) implementation of the "fifth sprite" status bits
- *
- * Revision 1.15  2000/01/15 16:29:09  nyef
- * fixed to check all 32 sprites (instead of just the first 31)
- *
- * Revision 1.14  2000/01/15 15:50:37  nyef
- * split sprite rendering up into two functions
- * changed to use a structure to hold sprite data for rendering
- * added support for "early clock" to the sprite renderer
- *
- * Revision 1.13  1999/12/04 06:14:10  nyef
- * fixed obi-wan error in the sprite renderer
- *
- * Revision 1.12  1999/11/27 23:06:04  nyef
- * added preliminary support for 16x16 sprites
- *
- * Revision 1.11  1999/11/27 22:51:56  nyef
- * added preliminary sprite implementation
- *
- * Revision 1.10  1999/11/27 21:26:30  nyef
- * added colortable to sms9918_render_line_mode_2()
- *
- * Revision 1.9  1999/11/27 21:13:41  nyef
- * cleaned up the patterntable logic in tms9918_render_line_mode_2()
- *
- * Revision 1.8  1999/11/27 20:32:16  nyef
- * rebuilt the video renderer mode selection to use a table of procpointers
- *
- * Revision 1.7  1999/11/27 20:25:02  nyef
- * split out tms9918_render_line_mode_[02]() from tms9918_render_line()
- *
- * Revision 1.6  1999/11/27 20:16:44  nyef
- * disabled debug output on register write
- *
- * Revision 1.5  1999/11/27 19:18:21  nyef
- * moved the vdp data structure in from tms9918.h
- * stripped out the procpointers from the data structure
- *
- * Revision 1.4  1999/06/10 01:50:08  nyef
- * fixed pattern lookup in mode 2
- *
- * Revision 1.3  1999/06/10 00:41:59  nyef
- * fixed colors in mode 0
- *
- * Revision 1.2  1999/06/09 00:34:08  nyef
- * added preliminary implementation of modes 0 and 2
- *
- * Revision 1.1  1999/06/08 01:49:25  nyef
- * Initial revision
- *
- */

@@ -5,7 +5,8 @@
 /* Colecovision context */
 typedef struct {
     uint8 ram[0x400];
-    
+	uint8 SGMram[0x8000];
+	
 	uint8 *bios;
     uint8 *cartridge;
     
