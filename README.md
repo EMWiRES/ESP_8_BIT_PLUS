@@ -6,10 +6,15 @@ See it in action on [Youtube](https://youtu.be/rVNFPvaSYXc)
 
 Tested on the [ESP32 USB stick with ESP_8_BIT support](http://www.emwires.com/ESP32USB/)
 
+Now supports the 8BitDo Zero 2 and FC30 Bluetooth gamepads.
+
 # The Emulated
 
 ## ColecoVision
 Based on [smsplus](https://www.bannister.org/software/sms.htm) and [DarcNES](https://segaretro.org/DarcNES). Plays **.col** (ColecoVision) ROMs. 
+
+SGM support.
+Better per pixel collision detection.
 
 | WiiMote (sideways) | COLECOVISION |
 | ---------- | ----------- |
@@ -17,6 +22,18 @@ Based on [smsplus](https://www.bannister.org/software/sms.htm) and [DarcNES](htt
 | A,1 | Keypad '1' |
 | B,2 | Fire |
 | Home | GUI |
+
+| 8BitDo | COLECOVISION |
+| ---------- | ----------- |
+| arrow keys | joystick |
+| A | Fire 1 |
+| B | Fire 2 |
+| X | Keypad 1 |
+| Y | Keypad 2 |
+| L1 | Keypad * |
+| L2 | Keypad # |
+| select | GUI |
+
 
 # Time to Play
 

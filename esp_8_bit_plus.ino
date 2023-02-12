@@ -33,7 +33,8 @@
 #define EMULATOR EMU_COLECOVISION
 
 //  Many emus work fine on a single core (S2), file system access can cause a little flickering
-//  #define SINGLE_CORE
+// Using single core slows down the emulation enough for Aztec Challenge.
+#define SINGLE_CORE
 
 // The filesystem should contain folders named for each of the emulators i.e.
 //    colecovision
@@ -64,9 +65,13 @@ void emu_loop() {
 
     // Draw a frame, update sound, process hid events
     uint32_t t = xthal_get_ccount();
+    
     gui_update();
+    
     _frame_time = xthal_get_ccount() - t;
+    
     _lines = _emu->video_buffer();
+    
     _drawn++;
 }
 
@@ -106,7 +111,8 @@ void setup() {
   emu_init();
   video_init(_emu->cc_width,_emu->flavor,_emu->composite_palette(),_emu->standard); // start the A/V pump on app core
   #else
-  xTaskCreatePinnedToCore(emu_task, "emu_task", 3*1024, NULL, 0, NULL, 0);
+  // Increase stack size....
+  xTaskCreatePinnedToCore(emu_task, "emu_task", 4*1024, NULL, 0, NULL, 0);
   #endif
 }
 
@@ -118,7 +124,7 @@ void perf() {
     _next = _drawn + 120;
     
     printf("frame_time:%d drawn:%d displayed:%d blit_ticks:%d->%d, isr time:%2.2f%%\n",
-      _frame_time/240,_drawn,_frame_counter,_blit_ticks_min,_blit_ticks_max,(_isr_us*100)/elapsed_us);
+           _frame_time,_drawn,_frame_counter,_blit_ticks_min,_blit_ticks_max,(_isr_us*100)/elapsed_us);
       
     _blit_ticks_min = 0xFFFFFFFF;
     _blit_ticks_max = 0;
