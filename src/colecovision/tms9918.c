@@ -40,24 +40,6 @@
     15 - White
 */
 
-/* Old values */
-/*
-const int tms9918_palbase_red[16] = {
-    0x00, 0x00, 0x22, 0x66, 0x22, 0x44, 0xbb, 0x44,
-    0xff, 0xff, 0xdd, 0xdd, 0x22, 0xdd, 0xbb, 0xff,
-};
-
-const int tms9918_palbase_green[16] = {
-    0x00, 0x00, 0xdd, 0xff, 0x22, 0x66, 0x22, 0xdd,
-    0x22, 0x66, 0xdd, 0xdd, 0x99, 0x44, 0xbb, 0xff,
-};
-
-const int tms9918_palbase_blue[16] = {
-    0x00, 0x00, 0x22, 0x66, 0xff, 0xff, 0x11, 0xff,
-    0x22, 0x66, 0x22, 0x66, 0x22, 0xbb, 0xbb, 0xff,
-}; */
-
-
 /* New values from WikiPedia */
 const int tms9918_palbase_red[16] = {
     0x00, 0x00, 0x0A, 0x34, 0x2B, 0x51, 0xBD, 0x1E,
@@ -192,8 +174,14 @@ int tms9918_cache_sprites(tms9918 *vdp, struct sprite_cache *cache, int sprite_s
 		    cache[num_sprites].x_pos -= 32;
 		}
 
-		cache[num_sprites].pattern = &pattern_table[sprites[i].pattern << 3];
-		cache[num_sprites].pattern += vdp->scanline - (sprites[i].y_pos + 1);
+		// Zoomed sprite?
+		if (vdp->regs[1] & 0x01) {
+			cache[num_sprites].pattern = &pattern_table[sprites[i].pattern << 3];
+			cache[num_sprites].pattern += (vdp->scanline - (sprites[i].y_pos + 1)) / 2;				
+		} else {
+			cache[num_sprites].pattern = &pattern_table[sprites[i].pattern << 3];
+			cache[num_sprites].pattern += vdp->scanline - (sprites[i].y_pos + 1);
+		}
 		
 		num_sprites++;
     }
@@ -291,8 +279,13 @@ void tms9918_render_sprites(tms9918 *vdp, unsigned char *cur_vbp)
     int num_sprites;
     int i;
     int sprite_size;
+    int spritezoom;
 
     sprite_size = (vdp->regs[1] & 0x02)? 16: 8;
+    spritezoom = (vdp->regs[1] & 0x01);
+    if (spritezoom) {
+    	sprite_size *= 2;
+	}
     
     num_sprites = tms9918_cache_sprites(vdp, cache, sprite_size);
 
@@ -333,85 +326,187 @@ void tms9918_render_sprites(tms9918 *vdp, unsigned char *cur_vbp)
 			<< ((cache[i].x_pos + sprite_size + 1) & 0xff);
 		}
 		
-		if (data & 0x8000) {
-		    *tmp_vbp = color;
-		}
-		
-		tmp_vbp++;
-		if (data & 0x4000) {
-		    *tmp_vbp = color;
-		}
-		
-		tmp_vbp++;
-		if (data & 0x2000) {
-		    *tmp_vbp = color;
-		}
-		
-		tmp_vbp++;
-		if (data & 0x1000) {
-		    *tmp_vbp = color;
-		}
-		
-		tmp_vbp++;
-		if (data & 0x0800) {
-		    *tmp_vbp = color;
-		}
-		
-		tmp_vbp++;
-		if (data & 0x0400) {
-		    *tmp_vbp = color;
-		}
-		
-		tmp_vbp++;
-		if (data & 0x0200) {
-		    *tmp_vbp = color;
-		}
-		
-		tmp_vbp++;
-		if (data & 0x0100) {
-		    *tmp_vbp = color;
-		}
-		
-		if (sprite_size == 16) {
-		    tmp_vbp++;
-		    if (data & 0x80) {
+		if (spritezoom) {
+			if (data & 0x8000) {
 				*tmp_vbp = color;
-		    }
-		    
-		    tmp_vbp++;
-		    if (data & 0x40) {
+			    *(tmp_vbp+1) = color;
+			}
+			tmp_vbp+=2;
+			
+			if (data & 0x4000) {
 				*tmp_vbp = color;
-		    }
-		    
-		    tmp_vbp++;
-		    if (data & 0x20) {
+			    *(tmp_vbp+1) = color;
+			}
+			tmp_vbp+=2;
+			
+			if (data & 0x2000) {
 				*tmp_vbp = color;
-		    }
-		    
-		    tmp_vbp++;
-		    if (data & 0x10) {
+			    *(tmp_vbp+1) = color;
+			}
+			tmp_vbp+=2;
+			
+			if (data & 0x1000) {
 				*tmp_vbp = color;
-		    }
-		    
-		    tmp_vbp++;
-		    if (data & 0x08) {
+			    *(tmp_vbp+1) = color;
+			}
+			tmp_vbp+=2;
+			
+			if (data & 0x0800) {
 				*tmp_vbp = color;
-		    }
-		    
-		    tmp_vbp++;
-		    if (data & 0x04) {
+			    *(tmp_vbp+1) = color;
+			}
+			tmp_vbp+=2;
+			
+			if (data & 0x0400) {
 				*tmp_vbp = color;
-		    }
-		    
-		    tmp_vbp++;
-		    if (data & 0x02) {
+			    *(tmp_vbp+1) = color;
+			}
+			tmp_vbp+=2;
+			
+			if (data & 0x0200) {
 				*tmp_vbp = color;
-		    }
-		    
-		    tmp_vbp++;
-		    if (data & 0x01) {
+			    *(tmp_vbp+1) = color;
+			}
+			tmp_vbp+=2;
+			
+			if (data & 0x0100) {
 				*tmp_vbp = color;
-		    }
+			    *(tmp_vbp+1) = color;
+			}
+			
+			if (sprite_size > 8) {
+				
+			    tmp_vbp+=2;
+			    if (data & 0x80) {
+					*tmp_vbp = color;
+					*(tmp_vbp+1) = color;
+			    }
+			    
+			    tmp_vbp+=2;
+			    if (data & 0x40) {
+					*tmp_vbp = color;
+					*(tmp_vbp+1) = color;
+			    }
+			    
+			    tmp_vbp+=2;
+			    if (data & 0x20) {
+					*tmp_vbp = color;
+					*(tmp_vbp+1) = color;
+			    }
+			    
+			    tmp_vbp+=2;
+			    if (data & 0x10) {
+					*tmp_vbp = color;
+					*(tmp_vbp+1) = color;
+			    }
+			    
+			    tmp_vbp+=2;
+			    if (data & 0x08) {
+					*tmp_vbp = color;
+					*(tmp_vbp+1) = color;
+			    }
+			    
+			    tmp_vbp+=2;
+			    if (data & 0x04) {
+					*tmp_vbp = color;
+					*(tmp_vbp+1) = color;
+			    }
+			    
+			    tmp_vbp+=2;
+			    if (data & 0x02) {
+					*tmp_vbp = color;
+					*(tmp_vbp+1) = color;
+			    }
+			    
+			    tmp_vbp+=2;
+			    if (data & 0x01) {
+					*tmp_vbp = color;
+					*(tmp_vbp+1) = color;
+			    }
+			}
+			
+		} else {
+			if (data & 0x8000) {
+			    *tmp_vbp = color;
+			}
+			tmp_vbp++;
+			
+			if (data & 0x4000) {
+			    *tmp_vbp = color;
+			}
+			tmp_vbp++;
+			
+			if (data & 0x2000) {
+			    *tmp_vbp = color;
+			}
+			tmp_vbp++;
+			
+			if (data & 0x1000) {
+			    *tmp_vbp = color;
+			}
+			tmp_vbp++;
+			
+			if (data & 0x0800) {
+			    *tmp_vbp = color;
+			}
+			tmp_vbp++;
+			
+			if (data & 0x0400) {
+			    *tmp_vbp = color;
+			}
+			tmp_vbp++;
+			
+			if (data & 0x0200) {
+			    *tmp_vbp = color;
+			}
+			tmp_vbp++;
+			
+			if (data & 0x0100) {
+			    *tmp_vbp = color;
+			}
+			
+			if (sprite_size > 8) {
+				
+			    tmp_vbp++;
+			    if (data & 0x80) {
+					*tmp_vbp = color;
+			    }
+			    
+			    tmp_vbp++;
+			    if (data & 0x40) {
+					*tmp_vbp = color;
+			    }
+			    
+			    tmp_vbp++;
+			    if (data & 0x20) {
+					*tmp_vbp = color;
+			    }
+			    
+			    tmp_vbp++;
+			    if (data & 0x10) {
+					*tmp_vbp = color;
+			    }
+			    
+			    tmp_vbp++;
+			    if (data & 0x08) {
+					*tmp_vbp = color;
+			    }
+			    
+			    tmp_vbp++;
+			    if (data & 0x04) {
+					*tmp_vbp = color;
+			    }
+			    
+			    tmp_vbp++;
+			    if (data & 0x02) {
+					*tmp_vbp = color;
+			    }
+			    
+			    tmp_vbp++;
+			    if (data & 0x01) {
+					*tmp_vbp = color;
+			    }
+			}
 		}
     }
 }
